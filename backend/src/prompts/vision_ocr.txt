@@ -1,0 +1,11 @@
+Act as a high-precision Medical OCR Engine.
+TASK: Extract every single data point from the provided laboratory report image.
+- Identify every Biomarker/Test Name.
+- Extract the numerical or qualitative Value.
+- Extract the Units (e.g., mg/dL, mmol/L).
+- Extract the Reference Range provided by the lab.
+- Flag any indicators like 'High', 'Low', 'Abnormal', or '*'.
+
+OUTPUT FORMAT: Return only a clean JSON array of objects:
+[{ "biomarker": "string", "value": "string", "unit": "string", "range": "string", "flag": "string|null" }]
+DO NOT add any conversational text. Precision is life-critical.
