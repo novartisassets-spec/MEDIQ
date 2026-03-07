@@ -1,8 +1,18 @@
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Home from './pages/Home';
+import LoginPage from './pages/Login';
+import SignupPage from './pages/Signup';
+
 export default function App() {
   return (
-    <div style={{ padding: '100px', textAlign: 'center', backgroundColor: '#f1e194', minHeight: '100vh', color: '#5b0e14' }}>
-      <h1 style={{ fontSize: '48px' }}>LAB.AI SYSTEM START</h1>
-      <p>If you can see this, the core rendering engine is active.</p>
-    </div>
-  )
+    <Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        {/* Redirect to Home for any unknown routes */}
+        <Route path="*" element={<Home />} />
+      </Routes>
+    </Router>
+  );
 }
