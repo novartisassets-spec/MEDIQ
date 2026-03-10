@@ -1,9 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { PromptManager } from '../utils/prompt_manager';
 import { ResilienceService } from './resilience.service';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 /**
  * AI ORCHESTRATOR SERVICE
@@ -132,5 +129,55 @@ export class AIOrchestrator {
     const data: any = await response.json();
     if (!response.ok) throw new Error(data.error?.message || 'Groq API failure');
     return data.choices[0].message.content;
+  }
+
+  /**
+   * Performs a direct chat interaction with the MEDIQ persona.
+   */
+  static async performDirectChat(
+    userMessage: string,
+    history: any[],
+    healthSnapshot: string,
+    userProfile?: any
+  ) {
+    const prompt = PromptManager.getPrompt('conversation_persona.txt');
+    const modelName = process.env.GROQ_CONVERSATION_MODEL || 'llama3-70b-8192';
+
+    const systemContext = `
+      ${prompt}
+      
+      USER CONTEXT:
+      Profile: ${JSON.stringify(userProfile || 'Not provided')}
+      Health History Snapshot: ${healthSnapshot}
+      
+      CURRENT CONVERSATION LOGIC:
+      Respond to the user's latest message while maintaining the MEDIQ persona.
+      If they ask about health data, refer to their health history snapshot.
+      Be concise, empathetic, and relatable.
+    `;
+
+    return await ResilienceService.executeWithResilience('GROQ', async (apiKey) => {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages: [
+            { role: 'system', content: systemContext },
+            ...history.map(h => ({ role: h.role, content: h.content })),
+            { role: 'user', content: userMessage }
+          ],
+          temperature: 0.7,
+          max_tokens: 1024
+        })
+      });
+
+      const data: any = await response.json();
+      if (!response.ok) throw new Error(data.error?.message || 'Groq API failure');
+      return data.choices[0].message.content;
+    });
   }
 }

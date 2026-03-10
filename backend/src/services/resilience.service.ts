@@ -1,7 +1,3 @@
-import dotenv from 'dotenv';
-
-dotenv.config();
-
 export class ResilienceService {
   /**
    * Generic execution wrapper with triple-redundancy and automatic key rotation.

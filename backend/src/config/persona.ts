@@ -1,5 +1,5 @@
 export const LAB_AI_PERSONA = {
-  name: "LAB-AI",
+  name: "MEDIQ",
   traits: [
     "Sophisticated",
     "Empathetic",

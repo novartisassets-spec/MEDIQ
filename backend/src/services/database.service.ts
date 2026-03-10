@@ -54,6 +54,57 @@ export class DatabaseService {
   }
 
   /**
+   * CHAT SESSION MANAGEMENT
+   */
+
+  static async createChatSession(userId: string, title?: string) {
+    const { data, error } = await supabaseAdmin
+      .from('chat_sessions')
+      .insert({ user_id: userId, title: title || 'New Protocol Discussion' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  static async getUserSessions(userId: string) {
+    const { data, error } = await supabaseAdmin
+      .from('chat_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  }
+
+  static async getSessionMessages(sessionId: string) {
+    const { data, error } = await supabaseAdmin
+      .from('chat_messages')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return data;
+  }
+
+  static async saveChatMessage(sessionId: string, role: 'user' | 'assistant', content: string, metadata?: any) {
+    const { error } = await supabaseAdmin
+      .from('chat_messages')
+      .insert({ session_id: sessionId, role, content, metadata });
+
+    if (error) throw error;
+
+    // Update session timestamp
+    await supabaseAdmin
+      .from('chat_sessions')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', sessionId);
+  }
+
+  /**
    * Gets the user's health profile for AI context.
    */
   static async getUserProfile(userId: string): Promise<UserProfile | null> {

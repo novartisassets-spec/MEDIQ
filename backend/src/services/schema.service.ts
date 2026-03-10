@@ -1,7 +1,4 @@
 import { Pool } from 'pg';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 export class SchemaService {
   private static pool = new Pool({
@@ -56,6 +53,29 @@ export class SchemaService {
           is_abnormal BOOLEAN DEFAULT FALSE,
           clinical_insight TEXT,
           recorded_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      // 4. Chat Sessions (ChatGPT-like History)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID REFERENCES profiles(id),
+          title TEXT DEFAULT 'New Protocol Discussion',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      // 5. Chat Messages (Contextual Memory)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_messages (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          session_id UUID REFERENCES chat_sessions(id) ON DELETE CASCADE,
+          role TEXT CHECK (role IN ('user', 'assistant')),
+          content TEXT NOT NULL,
+          metadata JSONB,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
       `);

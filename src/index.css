@@ -2,8 +2,199 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  padding: 0;
-  background-color: #f1e194;
+@layer base {
+  :root {
+    --background: 46 60% 84%; /* #f1e194 */
+    --foreground: 0 100% 25%; /* #5b0e14 */
+    --gold: #f1e194;
+    --burgundy: #5b0e14;
+    --radius: 1.5rem;
+  }
+}
+
+@layer base {
+  * { @apply border-border/5; }
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    font-size: 14px;
+  }
+  @media (min-width: 768px) {
+    html { font-size: 16px; }
+  }
+  body {
+    @apply bg-[#f1e194] text-[#5b0e14];
+    font-family: 'Inter', system-ui, sans-serif;
+    overflow-x: hidden;
+    line-height: 1.5;
+  }
+  h1, h2, h3, h4, h5, h6 { 
+    font-family: 'Playfair Display', serif;
+    @apply tracking-tight font-black;
+  }
+}
+
+@layer utilities {
+  .section-container {
+    @apply max-w-7xl mx-auto px-6 md:px-12 w-full;
+  }
+  
+  .glass-pill {
+    @apply rounded-full px-4 py-1.5 bg-white/30 backdrop-blur-xl border border-white/40 shadow-sm;
+  }
+  
+  .text-display-refined {
+    font-size: clamp(2.5rem, 7vw, 4.5rem);
+    line-height: 1.1;
+  }
+
+  .text-h2-refined {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    line-height: 1.2;
+  }
+
+  .pill-button-premium {
+    @apply rounded-full bg-[#5b0e14] text-[#f1e194] px-8 py-4 text-[10px] font-black tracking-[0.2em] uppercase transition-all duration-500 hover:bg-black hover:scale-105 active:scale-95 flex items-center justify-center gap-3;
+  }
+
+  /* Data Visualization Animations */
+  .chart-line-animate {
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 1000;
+    animation: dash 5s linear infinite;
+  }
+
+  .scanning-bar {
+    @apply absolute left-0 w-full h-1 bg-[#5b0e14]/20 blur-sm;
+    animation: scan 3s ease-in-out infinite;
+  }
+
+  .data-stream-item {
+    animation: slideInLeft 0.5s ease-out forwards;
+  }
+}
+
+@keyframes dash {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes scan {
+  0%, 100% { top: 0%; opacity: 0; }
+  50% { top: 100%; opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.33); }
+  80%, 100% { opacity: 0; }
+}
+
+.pulse-marker {
+  position: relative;
+}
+.pulse-marker::before {
+  content: '';
+  position: absolute;
+  width: 300%;
+  height: 300%;
+  border-radius: 50%;
+  background-color: #5b0e14;
+  opacity: 0.2;
+  animation: pulse-ring 1.25s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* Biometric Scanner Animations */
+@keyframes iris-sweep {
+  0%, 100% { transform: translateY(-50%) scaleY(1); opacity: 0.3; }
+  50% { transform: translateY(50%) scaleY(2); opacity: 0.8; }
+}
+
+@keyframes holographic-flicker {
+  0% { opacity: 0.8; }
+  5% { opacity: 0.4; }
+  10% { opacity: 0.8; }
+  15% { opacity: 0.9; }
+  25% { opacity: 0.2; }
+  30% { opacity: 0.8; }
+  100% { opacity: 0.9; }
+}
+
+.scanner-line {
+  animation: iris-sweep 4s ease-in-out infinite;
+}
+
+.holo-flicker {
+  animation: holographic-flicker 2s infinite;
+}
+
+/* Data Harvesting Animations */
+@keyframes biomarker-flicker {
+  0% { opacity: 0; transform: scale(0.8) translateY(10px); }
+  20% { opacity: 1; transform: scale(1.1) translateY(0); }
+  80% { opacity: 1; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(1.2) translateY(-10px); }
+}
+
+.biomarker-harvest {
+  animation: biomarker-flicker 0.8s ease-out forwards;
+}
+
+@keyframes card-reveal {
+  from { opacity: 0; transform: scale(0.9) translateY(30px); filter: blur(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+}
+
+.insight-card-reveal {
+  animation: card-reveal 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Mobile App Mockup Styles */
+.phone-frame {
+  @apply relative mx-auto w-[280px] h-[580px] bg-[#5b0e14] rounded-[3rem] border-[8px] border-[#5b0e14] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] overflow-hidden;
+}
+
+.phone-screen {
+  @apply absolute inset-0 bg-[#f1e194] rounded-[2.2rem] overflow-hidden flex flex-col;
+}
+
+@keyframes notification-slide {
+  0% { transform: translateY(-20px) scale(0.9); opacity: 0; }
+  10% { transform: translateY(0) scale(1); opacity: 1; }
+  90% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-20px) scale(0.9); opacity: 0; }
+}
+
+.notification-toast {
+  animation: notification-slide 5s ease-in-out infinite;
+}
+
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+  .reveal-on-scroll.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .grainy-overlay::before {  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.02;
+  pointer-events: none;
+  z-index: 50;
 }

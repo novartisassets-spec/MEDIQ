@@ -4,7 +4,7 @@ import { BiomarkerData } from '../types/medical';
 export class HealthMemoryService {
   /**
    * Fetches and formats a "Health Snapshot" for the AI prompt.
-   * This is what gives Julian his "Memory."
+   * This is what gives MEDIQ his "Memory."
    */
   static async getHealthSnapshot(userId: string): Promise<string> {
     const history = await DatabaseService.getUserHealthHistory(userId);
