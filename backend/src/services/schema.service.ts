@@ -18,14 +18,33 @@ export class SchemaService {
       // 1. User Profiles
       await client.query(`
         CREATE TABLE IF NOT EXISTS profiles (
-          id UUID PRIMARY KEY,
-          full_name TEXT NOT NULL,
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          whatsapp_number TEXT UNIQUE,
+          username TEXT UNIQUE,
+          full_name TEXT NOT NULL DEFAULT 'Sovereign User',
+          email TEXT,
+          country TEXT,
+          is_registered BOOLEAN DEFAULT FALSE,
+          words_consumed INTEGER DEFAULT 0,
+          docs_consumed INTEGER DEFAULT 0,
           date_of_birth DATE,
           gender TEXT CHECK (gender IN ('male', 'female', 'other')),
           base_health_conditions TEXT[],
+          welcome_sent BOOLEAN DEFAULT FALSE,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
       `);
+
+      // Ensure columns exist if table was created earlier
+      await client.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS whatsapp_number TEXT UNIQUE;`);
+      await client.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username TEXT UNIQUE;`);
+      await client.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email TEXT;`);
+      await client.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS country TEXT;`);
+      await client.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_registered BOOLEAN DEFAULT FALSE;`);
+      await client.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS words_consumed INTEGER DEFAULT 0;`);
+      await client.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS docs_consumed INTEGER DEFAULT 0;`);
+      await client.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS welcome_sent BOOLEAN DEFAULT FALSE;`);
+      await client.query(`ALTER TABLE profiles ALTER COLUMN id SET DEFAULT gen_random_uuid();`);
 
       // 2. Lab Reports Metadata
       await client.query(`

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
 import { 
   Send, Camera, User, Bot, 
-  Settings, Plus, X,
+  Plus, X,
   Activity, Brain, Shield,
   Menu, Phone, Stethoscope, MessageSquare,
-  HeartPulse, Zap, MessageCircle
+  HeartPulse, Zap, MessageCircle, LogOut
 } from 'lucide-react';
 import { gsap } from 'gsap';
 import { Button } from '@/components/ui/button';
@@ -77,14 +78,37 @@ export default function Dashboard() {
   const [inputValue, setInputValue] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [thinkingStage, setThinkingStage] = useState('Consulting MEDIQ Core...');
+  const [streamingText, setStreamingText] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isBackendOnline, setIsBackendOnline] = useState<boolean | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [profile, setProfile] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const BACKEND_URL = getBackendUrl();
-  const userId = 'test-user-id'; // In production, get from Auth
+  
+  // 0. Auth & Profile Check
+  useEffect(() => {
+    const initDashboard = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/login');
+        return;
+      }
+      setUserId(session.user.id);
+      
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+      
+      if (profileData) setProfile(profileData);
+    };
+    initDashboard();
+  }, [navigate]);
 
   // Bouncing Effects
   useEffect(() => {
@@ -136,6 +160,7 @@ export default function Dashboard() {
 
   // 1. Fetch User Sessions
   const fetchSessions = async () => {
+    if (!userId) return;
     try {
       const res = await fetch(`${BACKEND_URL}/sessions?userId=${userId}`);
       if (res.ok) {
@@ -143,9 +168,13 @@ export default function Dashboard() {
         setSessions(data);
       }
     } catch (e) {
-      console.error('Failed to fetch sessions');
+      console.warn('Backend sessions unreachable');
     }
   };
+
+  useEffect(() => {
+    if (userId) fetchSessions();
+  }, [userId]);
 
   // 2. Load Session History
   const loadSession = async (sessionId: string) => {
@@ -182,8 +211,19 @@ export default function Dashboard() {
       }
     };
     checkConnection();
-    fetchSessions();
   }, []);
+
+  const typeText = async (text: string) => {
+    setStreamingText('');
+    const words = text.split(' ');
+    let current = '';
+    for (const word of words) {
+      current += (current ? ' ' : '') + word;
+      setStreamingText(current);
+      await new Promise(r => setTimeout(r, 30 + Math.random() * 40));
+    }
+    return current;
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -220,7 +260,11 @@ export default function Dashboard() {
           message: text,
           userId,
           sessionId: activeSessionId,
-          history: messages.map(m => ({ role: m.role, content: m.content }))
+          history: messages.map(m => ({ 
+            role: m.role, 
+            content: m.content,
+            timestamp: m.timestamp 
+          }))
         }),
       });
 
@@ -233,16 +277,21 @@ export default function Dashboard() {
         fetchSessions();
       }
 
+      setIsThinking(false);
+      const fullText = await typeText(data.response || "Clinical synthesis complete.");
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.response || "Clinical synthesis complete.",
+        content: fullText,
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      setStreamingText('');
     } catch (error) {
       console.error('Chat error:', error);
+      setIsThinking(false);
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -250,8 +299,6 @@ export default function Dashboard() {
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMsg]);
-    } finally {
-      setIsThinking(false);
     }
   };
 
@@ -272,9 +319,10 @@ export default function Dashboard() {
     };
     setMessages(prev => [...prev, uploadMsg]);
 
+    setIsThinking(true);
+    setThinkingStage('Initiating clinical scan...');
+
     try {
-      toast.info("Analyzing report...");
-      
       const response = await fetch(`${BACKEND_URL}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -293,21 +341,24 @@ export default function Dashboard() {
         fetchSessions();
       }
 
+      setIsThinking(false);
+      const fullText = await typeText(data.summary || "Biomarkers extracted and mapped to protocol.");
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.summary || "Biomarkers extracted successfully.",
+        content: fullText,
         type: 'analysis',
         metadata: data.findings,
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      setStreamingText('');
     } catch (error) {
-      toast.error('Analysis failed.');
-    } finally {
-      setIsUploading(false);
+      console.error('Analysis error:', error);
       setIsThinking(false);
+      toast.error('Analysis failed.');
     }
   };
 
@@ -388,12 +439,23 @@ export default function Dashboard() {
 
           <div className="mt-auto pt-6 border-t border-white/10">
             <div className="flex items-center gap-4 p-4 bg-white/5 rounded-3xl border border-white/5">
-              <div className="w-10 h-10 rounded-2xl bg-[#f1e194] flex items-center justify-center text-[#5b0e14] font-black text-xs">U</div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-black truncate uppercase tracking-widest">Sovereign</p>
-                <p className="text-[9px] opacity-40 uppercase font-bold">Gold Tier</p>
+              <div className="w-10 h-10 rounded-2xl bg-[#f1e194] flex items-center justify-center text-[#5b0e14] font-black text-xs uppercase">
+                {profile?.username?.[0] || profile?.full_name?.[0] || 'U'}
               </div>
-              <Settings className="w-5 h-5 opacity-30 hover:opacity-100 cursor-pointer" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-black truncate uppercase tracking-widest">{profile?.username || profile?.full_name || 'Sovereign'}</p>
+                <p className="text-[9px] opacity-40 uppercase font-bold">{profile?.country || 'Global'} Node</p>
+              </div>
+              <button 
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  navigate('/login');
+                }}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors group"
+                title="Logout"
+              >
+                <LogOut className="w-4 h-4 opacity-30 group-hover:opacity-100 group-hover:text-red-400" />
+              </button>
             </div>
           </div>
         </div>
@@ -539,6 +601,18 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
+
+              {streamingText && (
+                <div className="flex gap-5 items-start animate-in fade-in duration-300">
+                  <MEDIQAvatar isThinking={false} />
+                  <div className="flex flex-col items-start max-w-[88%]">
+                    <div className="relative p-6 sm:p-8 rounded-[2rem] text-sm sm:text-base leading-relaxed bg-white/90 backdrop-blur-xl border border-[#5b0e14]/5 text-[#5b0e14] rounded-tl-none font-serif italic shadow-sm">
+                      {streamingText}
+                      <span className="inline-block w-1 h-4 bg-[#5b0e14] ml-1 animate-pulse" />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {isThinking && (
                 <div className="flex gap-5 items-start">

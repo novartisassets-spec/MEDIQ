@@ -61,8 +61,18 @@ export class AnalyzeController {
       );
 
       // 6. Save messages to session history
-      await DatabaseService.saveChatMessage(activeSessionId, 'user', `Analyzed lab report: ${fileUrl}`, { reportId: savedReport.id });
-      await DatabaseService.saveChatMessage(activeSessionId, 'assistant', analysis.final_response, { type: 'analysis', findings: analysis.raw_data });
+      const isDocument = !!analysis.raw_data && analysis.raw_data.length > 0;
+      await DatabaseService.saveChatMessage(activeSessionId, 'user', `Analyzed ${isDocument ? 'report' : 'visual symptom'}: ${fileUrl}`, { reportId: savedReport?.id });
+      
+      await DatabaseService.saveChatMessage(
+        activeSessionId, 
+        'assistant', 
+        analysis.final_response, 
+        { 
+          type: isDocument ? 'analysis' : 'visual_analysis', 
+          findings: analysis.clinical_insights 
+        }
+      );
 
       // 7. Sophisticated Response Delivery
       return res.status(200).json({

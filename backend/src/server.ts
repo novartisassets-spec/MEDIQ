@@ -3,6 +3,7 @@ dotenv.config();
 
 import app from './app';
 import { SchemaService } from './services/schema.service';
+import { WhatsAppConnection } from './whatsapp/connection';
 
 const PORT = process.env.PORT || 5000;
 
@@ -22,7 +23,10 @@ async function startServer() {
     // 1. Initialize Database Schema (Auto-Init & Pooling)
     await SchemaService.initializeSchema();
 
-    // 2. Start Express
+    // 2. Initialize WhatsApp Bridge
+    await WhatsAppConnection.connect();
+
+    // 3. Start Express
     const server = app.listen(PORT, () => {
       console.log(`[LAB-AI Server] Running on http://localhost:${PORT}`);
       console.log(`[LAB-AI Status] Production-ready architecture initialized with DB Resilience.`);

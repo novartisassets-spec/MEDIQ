@@ -1,9 +1,17 @@
 export interface UserProfile {
   id: string;
+  whatsapp_number?: string;
+  username?: string;
   full_name: string;
-  date_of_birth: string;
-  gender: 'male' | 'female' | 'other';
-  base_health_conditions: string[];
+  email?: string;
+  country?: string;
+  is_registered?: boolean;
+  words_consumed?: number;
+  docs_consumed?: number;
+  date_of_birth?: string;
+  gender?: 'male' | 'female' | 'other';
+  base_health_conditions?: string[];
+  welcome_sent?: boolean;
 }
 
 export interface LabReport {

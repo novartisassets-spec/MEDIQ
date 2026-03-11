@@ -143,17 +143,29 @@ export class AIOrchestrator {
     const prompt = PromptManager.getPrompt('conversation_persona.txt');
     const modelName = process.env.GROQ_CONVERSATION_MODEL || 'llama3-70b-8192';
 
+    const formattedHistory = history.map(h => {
+      const time = h.timestamp ? new Date(h.timestamp).toLocaleTimeString() : 'Unknown time';
+      return { 
+        role: h.role, 
+        content: `[${time}] ${h.role === 'assistant' ? 'MEDIQ' : 'User'}: ${h.content}`
+      };
+    });
+
     const systemContext = `
       ${prompt}
       
-      USER CONTEXT:
+      USER DATA CONTEXT:
       Profile: ${JSON.stringify(userProfile || 'Not provided')}
-      Health History Snapshot: ${healthSnapshot}
+      Comprehensive Health History: ${healthSnapshot}
       
-      CURRENT CONVERSATION LOGIC:
-      Respond to the user's latest message while maintaining the MEDIQ persona.
-      If they ask about health data, refer to their health history snapshot.
-      Be concise, empathetic, and relatable.
+      MISSION:
+      You are having a continuous conversation with a close friend about their health. 
+      - Use the provided conversation history (with timestamps) to understand the progression.
+      - If you previously asked a question, check if the user answered it.
+      - If you were discussing a specific biomarker, maintain that focus until it's natural to move on.
+      - Synthesize past context when relevant (e.g., "Earlier you mentioned feeling tired...").
+      - Always bridge to their lifestyle.
+      - Use plain English ONLY.
     `;
 
     return await ResilienceService.executeWithResilience('GROQ', async (apiKey) => {
@@ -167,7 +179,7 @@ export class AIOrchestrator {
           model: modelName,
           messages: [
             { role: 'system', content: systemContext },
-            ...history.map(h => ({ role: h.role, content: h.content })),
+            ...formattedHistory,
             { role: 'user', content: userMessage }
           ],
           temperature: 0.7,
@@ -177,6 +189,35 @@ export class AIOrchestrator {
 
       const data: any = await response.json();
       if (!response.ok) throw new Error(data.error?.message || 'Groq API failure');
+      return data.choices[0].message.content;
+    });
+  }
+
+  /**
+   * Generates a personalized welcome message for WhatsApp onboarding.
+   */
+  static async generateWelcomeMessage(userName?: string) {
+    const prompt = PromptManager.getPrompt('welcome_persona.txt');
+    const modelName = process.env.GROQ_CONVERSATION_MODEL || 'llama3-70b-8192';
+
+    return await ResilienceService.executeWithResilience('GROQ', async (apiKey) => {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages: [
+            { role: 'system', content: prompt },
+            { role: 'user', content: `The user's name is ${userName || 'Sovereign User'}. Greet them and welcome them to MEDIQ.` }
+          ],
+          temperature: 0.9 // Higher creativity for unique welcome messages
+        })
+      });
+
+      const data: any = await response.json();
       return data.choices[0].message.content;
     });
   }

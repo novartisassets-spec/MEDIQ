@@ -104,6 +104,101 @@ export class DatabaseService {
       .eq('id', sessionId);
   }
 
+  static async getLastVisualAnalysis(userId: string) {
+    // Queries chat_messages across all sessions for this user looking for analysis metadata
+    return await supabaseAdmin
+      .from('chat_messages')
+      .select('content, created_at')
+      .eq('role', 'assistant')
+      .not('metadata', 'is', null)
+      .filter('metadata->type', 'eq', 'visual_analysis')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+  }
+
+  /**
+   * WHATSAPP USER MANAGEMENT
+   */
+
+  /**
+   * Registers a new user with their profile details.
+   */
+  static async registerUser(profile: Partial<UserProfile>) {
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .upsert({
+        ...profile,
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[DatabaseService] Registration error:', error);
+      throw error;
+    }
+
+    return data;
+  }
+
+  static async getOrCreateUserByWhatsApp(whatsappId: string) {
+    // Try to find user by their WhatsApp JID (e.g., 1234567890@s.whatsapp.net)
+    const { data: user, error } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('whatsapp_number', whatsappId)
+      .maybeSingle();
+
+    if (user) return { user, isNew: false };
+
+    // Create new user if not found (Implicit registration)
+    // We try to extract a clean number if possible
+    const cleanNumber = whatsappId.split('@')[0];
+
+    const { data: newUser, error: createError } = await supabaseAdmin
+      .from('profiles')
+      .insert({ 
+        whatsapp_number: whatsappId,
+        full_name: 'Sovereign User',
+        username: `user_${cleanNumber.slice(-4)}` // Temporary username
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error('[DatabaseService] Error during implicit WhatsApp registration:', createError);
+      throw createError;
+    }
+    
+    return { user: newUser, isNew: true };
+  }
+
+  static async markWelcomeSent(userId: string) {
+    await supabaseAdmin
+      .from('profiles')
+      .update({ welcome_sent: true })
+      .eq('id', userId);
+  }
+
+  static async incrementConsumables(userId: string, words: number, docs: number = 0) {
+    const { data: user } = await supabaseAdmin
+      .from('profiles')
+      .select('words_consumed, docs_consumed')
+      .eq('id', userId)
+      .single();
+
+    if (user) {
+      await supabaseAdmin
+        .from('profiles')
+        .update({
+          words_consumed: (user.words_consumed || 0) + words,
+          docs_consumed: (user.docs_consumed || 0) + docs
+        })
+        .eq('id', userId);
+    }
+  }
+
   /**
    * Gets the user's health profile for AI context.
    */
