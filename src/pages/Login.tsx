@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { Lock, Mail, ArrowLeft, Sparkles, Zap, Fingerprint, ShieldCheck } from 'lucide-react';
+import { Lock, Mail, ArrowLeft, Sparkles, Zap, Fingerprint, ShieldCheck, MessageCircle } from 'lucide-react';
 import { gsap } from 'gsap';
 
 export default function LoginPage() {
@@ -115,7 +115,7 @@ export default function LoginPage() {
               <div className="space-y-1.5">
                 <label className="text-[8px] font-black uppercase tracking-[0.3em] opacity-40 ml-4">Secure ID</label>
                 <div className="relative group">
-                  <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5b0e14] group-focus-within:text-[#5b0e14] transition-colors" />
+                  <MessageCircle className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5b0e14] group-focus-within:text-[#5b0e14] transition-colors" />
                   <input 
                     type="text" value={email} onChange={(e) => setEmail(e.target.value)}
                     placeholder="nexus@mediq.ai or +234..." 
