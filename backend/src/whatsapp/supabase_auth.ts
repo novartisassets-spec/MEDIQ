@@ -34,8 +34,11 @@ export const useSupabaseAuthState = async (): Promise<{ state: AuthenticationSta
 
   const creds: AuthenticationCreds = data?.creds || initAuthCreds();
   const keys: any = data?.keys || {};
+  let isSaving = false;
 
   const saveState = async (creds: AuthenticationCreds, keys: any) => {
+    if (isSaving) return;
+    isSaving = true;
     try {
       const sessionData = JSON.stringify({ creds, keys }, BufferJSON.replacer);
       const { error } = await supabaseAdmin.storage
@@ -47,11 +50,11 @@ export const useSupabaseAuthState = async (): Promise<{ state: AuthenticationSta
       
       if (error) {
         console.error('[Auth] Supabase storage error:', error.message);
-      } else {
-        // console.log('[Auth] State saved to Supabase');
       }
     } catch (e: any) {
       console.error('[Auth] Critical fetch failure while saving state:', e.message);
+    } finally {
+      isSaving = false;
     }
   };
 

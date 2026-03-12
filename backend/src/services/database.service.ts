@@ -21,6 +21,33 @@ export class DatabaseService {
   }
 
   /**
+   * Retrieves the most recent record for each unique biomarker for a user.
+   */
+  static async getLatestBiomarkers(userId: string): Promise<BiomarkerData[]> {
+    const { data, error } = await supabaseAdmin
+      .from('biomarkers')
+      .select('*')
+      .eq('user_id', userId)
+      .order('name', { ascending: true })
+      .order('recorded_at', { ascending: false });
+
+    if (error) {
+      console.error('[DatabaseService] Error fetching latest biomarkers:', error);
+      return [];
+    }
+
+    // Filter to get only the latest entry for each biomarker name
+    const latest: Record<string, BiomarkerData> = {};
+    (data as BiomarkerData[]).forEach(item => {
+      if (!latest[item.name]) {
+        latest[item.name] = item;
+      }
+    });
+
+    return Object.values(latest);
+  }
+
+  /**
    * Saves a new analyzed report and its individual biomarkers.
    */
   static async saveAnalyzedReport(report: Partial<LabReport>, biomarkers: Partial<BiomarkerData>[]) {
@@ -57,15 +84,28 @@ export class DatabaseService {
    * CHAT SESSION MANAGEMENT
    */
 
-  static async createChatSession(userId: string, title?: string) {
+  static async createChatSession(userId: string, title?: string, platform: 'dashboard' | 'whatsapp' = 'dashboard') {
     const { data, error } = await supabaseAdmin
       .from('chat_sessions')
-      .insert({ user_id: userId, title: title || 'New Protocol Discussion' })
+      .insert({ 
+        user_id: userId, 
+        title: title || 'New Protocol Discussion',
+        platform
+      })
       .select()
       .single();
 
     if (error) throw error;
     return data;
+  }
+
+  static async deleteSession(sessionId: string) {
+    const { error } = await supabaseAdmin
+      .from('chat_sessions')
+      .delete()
+      .eq('id', sessionId);
+
+    if (error) throw error;
   }
 
   static async getUserSessions(userId: string) {
@@ -79,6 +119,52 @@ export class DatabaseService {
     return data;
   }
 
+  static async getSessionSummary(sessionId: string) {
+    const { data, error } = await supabaseAdmin
+      .from('chat_sessions')
+      .select('summary')
+      .eq('id', sessionId)
+      .single();
+
+    if (error) return null;
+    return data.summary;
+  }
+
+  static async updateSessionSummary(sessionId: string, summary: string) {
+    const { error } = await supabaseAdmin
+      .from('chat_sessions')
+      .update({ summary, updated_at: new Date().toISOString() })
+      .eq('id', sessionId);
+
+    if (error) throw error;
+  }
+
+  /**
+   * Cross-platform context: Get the latest summary from the other platform.
+   */
+  static async getPlatformSummary(userId: string, targetPlatform: 'whatsapp' | 'dashboard') {
+    const { data: sessions, error } = await supabaseAdmin
+      .from('chat_sessions')
+      .select('id, summary')
+      .eq('user_id', userId)
+      .not('summary', 'is', null)
+      .order('updated_at', { ascending: false });
+
+    if (error || !sessions) return null;
+
+    for (const s of sessions) {
+      const { data: messages } = await supabaseAdmin
+        .from('chat_messages')
+        .select('platform')
+        .eq('session_id', s.id)
+        .eq('platform', targetPlatform)
+        .limit(1);
+      
+      if (messages && messages.length > 0) return s.summary;
+    }
+    return null;
+  }
+
   static async getSessionMessages(sessionId: string) {
     const { data, error } = await supabaseAdmin
       .from('chat_messages')
@@ -90,10 +176,10 @@ export class DatabaseService {
     return data;
   }
 
-  static async saveChatMessage(sessionId: string, role: 'user' | 'assistant', content: string, metadata?: any) {
+  static async saveChatMessage(sessionId: string, role: 'user' | 'assistant', content: string, platform: 'dashboard' | 'whatsapp' = 'dashboard', metadata?: any) {
     const { error } = await supabaseAdmin
       .from('chat_messages')
-      .insert({ session_id: sessionId, role, content, metadata });
+      .insert({ session_id: sessionId, role, content, platform, metadata });
 
     if (error) throw error;
 
@@ -122,6 +208,64 @@ export class DatabaseService {
    */
 
   /**
+   * Resolves a profile by searching for the number part of the WhatsApp JID.
+   */
+  static async getProfileByNumber(number: string) {
+    const cleanNumber = number.replace(/\D/g, '');
+    console.log(`[DatabaseService] Resolving profile for number: ${cleanNumber}`);
+    
+    // Search using a pattern match to handle different JID suffixes
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .filter('whatsapp_number', 'ilike', `%${cleanNumber}%`)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[DatabaseService] Error resolving profile by number:', error);
+      return null;
+    }
+    
+    if (data) console.log(`[DatabaseService] Profile found for ${cleanNumber}: ${data.full_name} (${data.id})`);
+    else console.log(`[DatabaseService] No profile found for ${cleanNumber}`);
+    
+    return data;
+  }
+
+  static async updateProfile(userId: string, updates: Partial<UserProfile>) {
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .update(updates)
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  /**
+   * LID BRIDGE METHODS
+   */
+  static async saveLidMapping(lid: string, phone: string) {
+    const { error } = await supabaseAdmin
+      .from('lid_mappings')
+      .upsert({ lid, phone }, { onConflict: 'lid' });
+    if (error) console.error('[DatabaseService] Error saving LID mapping:', error);
+  }
+
+  static async getPhoneByLid(lid: string): Promise<string | null> {
+    const { data, error } = await supabaseAdmin
+      .from('lid_mappings')
+      .select('phone')
+      .eq('lid', lid)
+      .maybeSingle();
+    
+    if (error || !data) return null;
+    return data.phone;
+  }
+
+  /**
    * Registers a new user with their profile details.
    */
   static async registerUser(profile: Partial<UserProfile>) {
@@ -143,25 +287,73 @@ export class DatabaseService {
   }
 
   static async getOrCreateUserByWhatsApp(whatsappId: string) {
-    // Try to find user by their WhatsApp JID (e.g., 1234567890@s.whatsapp.net)
-    const { data: user, error } = await supabaseAdmin
+    // 1. Precise Normalization
+    let normalizedId = whatsappId.trim();
+    const cleanNumber = normalizedId.split('@')[0].replace(/\D/g, '');
+    
+    console.log(`[DatabaseService] WhatsApp Lookup -> JID: ${normalizedId} | CleanNum: ${cleanNumber}`);
+
+    // 2. Lookup with precedence:
+    // A. Direct JID Match (Best case, catches mapped LIDs and PNIDs)
+    const { data: userByJid } = await supabaseAdmin
       .from('profiles')
       .select('*')
-      .eq('whatsapp_number', whatsappId)
+      .eq('whatsapp_number', normalizedId)
       .maybeSingle();
 
-    if (user) return { user, isNew: false };
+    if (userByJid) {
+      console.log(`[DatabaseService] Identity Match Found: ${userByJid.full_name}`);
+      return { user: userByJid, isNew: false };
+    }
 
-    // Create new user if not found (Implicit registration)
-    // We try to extract a clean number if possible
-    const cleanNumber = whatsappId.split('@')[0];
+    // B. LID BRIDGE RECOVERY (New: Catch users before they become "Genesis")
+    if (normalizedId.endsWith('@lid')) {
+      const mappedPhone = await this.getPhoneByLid(normalizedId);
+      if (mappedPhone) {
+        console.log(`[DatabaseService] LID Bridge Hit: ${normalizedId} -> ${mappedPhone}`);
+        // Attempt recovery using the mapped phone number
+        const { data: recoveredUser } = await supabaseAdmin
+          .from('profiles')
+          .select('*')
+          .ilike('whatsapp_number', `%${mappedPhone}%`)
+          .maybeSingle();
 
+        if (recoveredUser) {
+          console.log(`[DatabaseService] Identity Recovered via Bridge: ${recoveredUser.full_name}`);
+          // Promote LID to primary JID for future direct matches
+          await supabaseAdmin.from('profiles').update({ whatsapp_number: normalizedId }).eq('id', recoveredUser.id);
+          return { user: { ...recoveredUser, whatsapp_number: normalizedId }, isNew: false };
+        }
+      }
+    }
+
+    // C. Numeric Match (Fallback for unmapped LIDs or different PNID formats)
+    console.log(`[DatabaseService] No direct match. Searching by number: %${cleanNumber}%`);
+    const { data: userByNumberMatch } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .ilike('whatsapp_number', `%${cleanNumber}%`)
+      .maybeSingle();
+
+    if (userByNumberMatch) {
+      console.log(`[DatabaseService] Numeric Match Found: ${userByNumberMatch.full_name}. Linking JID ${normalizedId}`);
+      const { data: updatedUser } = await supabaseAdmin
+        .from('profiles')
+        .update({ whatsapp_number: normalizedId })
+        .eq('id', userByNumberMatch.id)
+        .select()
+        .single();
+      return { user: updatedUser || userByNumberMatch, isNew: false };
+    }
+
+    console.log(`[DatabaseService] Total Identity Mismatch. Provisioning Genesis Profile for ${normalizedId}`);
+    // 3. Create new user if no identity exists
     const { data: newUser, error: createError } = await supabaseAdmin
       .from('profiles')
       .insert({ 
-        whatsapp_number: whatsappId,
+        whatsapp_number: normalizedId,
         full_name: 'Sovereign User',
-        username: `user_${cleanNumber.slice(-4)}` // Temporary username
+        username: `user_${cleanNumber.slice(-4)}`
       })
       .select()
       .single();

@@ -3,11 +3,16 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { 
   Lock, Mail, ArrowLeft, UserCircle, 
-  MessageCircle, Globe, ChevronDown, 
+  MessageCircle, Globe, 
   ShieldCheck, Sparkles, Zap, Fingerprint 
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { gsap } from 'gsap';
+
+const getBackendUrl = () => {
+  const hostname = window.location.hostname;
+  return `http://${hostname}:5000/api/v1`;
+};
 
 const countryCodes = [
   { code: '+234', flag: '🇳🇬', name: 'Nigeria' },
@@ -30,7 +35,8 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [country, setCountry] = useState('Nigeria');
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  const BACKEND_URL = getBackendUrl();
   
   const mainRef = useRef<HTMLDivElement>(null);
   const orbsRef = useRef<HTMLDivElement>(null);
@@ -85,7 +91,22 @@ export default function SignupPage() {
     setLoading(true);
     
     const cleanWhatsapp = (countryCode + whatsapp).replace(/\D/g, '');
-    const fullJid = cleanWhatsapp + '@s.whatsapp.net';
+    let fullJid = cleanWhatsapp + '@s.whatsapp.net';
+    
+    // 1. Resolve Profile JID (might be @lid if they started on WhatsApp)
+    try {
+      const resolveRes = await fetch(`${BACKEND_URL}/resolve-profile/${cleanWhatsapp}`);
+      if (resolveRes.ok) {
+        const existingProfile = await resolveRes.json();
+        if (existingProfile && existingProfile.whatsapp_number) {
+          fullJid = existingProfile.whatsapp_number;
+          console.log('[Signup] Resolved existing JID:', fullJid);
+        }
+      }
+    } catch (e) {
+      console.warn('[Signup] Could not resolve existing profile JID. Defaulting to @s.whatsapp.net');
+    }
+
     const authEmail = email || `${cleanWhatsapp}@mediq.ai`;
     
     const { data: authData, error: authError } = await supabase.auth.signUp({ 
@@ -119,6 +140,24 @@ export default function SignupPage() {
         toast.error(`Sync failure: ${profileError.message}`);
       } else {
         toast.success('Protocol Initialized.');
+        
+        // Proactively send welcome message via WhatsApp (with 3s delay for DB sync)
+        setTimeout(async () => {
+          try {
+            await fetch(`${BACKEND_URL}/send-welcome`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId: authData.user!.id,
+                whatsappJid: fullJid
+              })
+            });
+            console.log('[Signup] Welcome message trigger sent successfully.');
+          } catch (welcomeError) {
+            console.error('[Signup] Failed to trigger welcome message:', welcomeError);
+          }
+        }, 3000);
+
         navigate('/dashboard');
       }
     }

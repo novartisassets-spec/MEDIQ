@@ -138,28 +138,46 @@ export class AIOrchestrator {
     userMessage: string,
     history: any[],
     healthSnapshot: string,
-    userProfile?: any
+    userProfile?: any,
+    crossPlatformSummary?: string | null
   ) {
     const prompt = PromptManager.getPrompt('conversation_persona.txt');
     const modelName = process.env.GROQ_CONVERSATION_MODEL || 'llama3-70b-8192';
 
-    const formattedHistory = history.map(h => {
-      const time = h.timestamp ? new Date(h.timestamp).toLocaleTimeString() : 'Unknown time';
+    // 1. Sliding Window: Take only the last 9 messages for live flow
+    const liveHistory = history.slice(-9);
+    
+    // 2. Attribution: Tag messages with platform and timestamp
+    const formattedHistory = liveHistory.map(h => {
+      const time = h.created_at || h.timestamp ? new Date(h.created_at || h.timestamp).toLocaleTimeString() : 'Recent';
+      const platformLabel = h.platform ? h.platform.toUpperCase() : 'CORE';
       return { 
         role: h.role, 
-        content: `[${time}] ${h.role === 'assistant' ? 'MEDIQ' : 'User'}: ${h.content}`
+        content: `[${time} - ${platformLabel}] ${h.role === 'assistant' ? 'MEDIQ' : 'User'}: ${h.content}`
       };
     });
 
+    // 3. System Context Assembly (Hierarchical)
     const systemContext = `
       ${prompt}
       
-      USER DATA CONTEXT:
-      Profile: ${JSON.stringify(userProfile || 'Not provided')}
-      Comprehensive Health History: ${healthSnapshot}
+      === SOVEREIGN HEALTH SNAPSHOT (REAL-TIME DATA) ===
+      ${healthSnapshot}
+      
+      === LONG-TERM MEMORY (CROSS-PLATFORM CONTINUITY) ===
+      ${crossPlatformSummary ? `OTHER FEED SUMMARY: ${crossPlatformSummary}` : 'No prior cross-platform history detected.'}
+      ${history.length > 9 && history[0].sessionSummary ? `CURRENT SESSION ARCHIVE: ${history[0].sessionSummary}` : ''}
+      
+      USER IDENTITY:
+      ${JSON.stringify(userProfile || 'Sovereign Node')}
       
       MISSION:
-      You are having a continuous conversation with a close friend about their health. 
+      You are an elite clinical orchestrator. You are having a continuous conversation across multiple nodes (WhatsApp & Dashboard). 
+      - IMPORTANT: Your response MUST be clean, natural raw text only. **NEVER** include the "[TIME - PLATFORM] MEDIQ:" prefix or any other metadata labels in your own output.
+      - Always address the user by their Name if provided.
+      - Use the provided context to bridge conversations (e.g., "Earlier on WhatsApp you mentioned...").
+      - Maintain a consistent clinical persona and elite professional tone.
+      - If you see a shift in biomarkers in the Snapshot, address it if relevant.
       - Use the provided conversation history (with timestamps) to understand the progression.
       - If you previously asked a question, check if the user answered it.
       - If you were discussing a specific biomarker, maintain that focus until it's natural to move on.
@@ -189,6 +207,45 @@ export class AIOrchestrator {
 
       const data: any = await response.json();
       if (!response.ok) throw new Error(data.error?.message || 'Groq API failure');
+      return data.choices[0].message.content;
+    });
+  }
+
+  /**
+   * Generates a high-density clinical summary of a conversation session.
+   */
+  static async generateSessionSummary(history: any[]) {
+    const modelName = process.env.GROQ_CONVERSATION_MODEL || 'llama3-70b-8192';
+    const summaryPrompt = `
+      As a Senior Medical Data Analyst, provide a high-density Executive Summary of the following health-related conversation.
+      Focus on:
+      1. Primary concerns raised by the user.
+      2. Key clinical insights or biomarkers discussed.
+      3. Actionable advice already given by MEDIQ.
+      4. Outstanding questions or next steps.
+      
+      KEEP IT CONCISE AND FACT-DENSE (under 200 words). Use clinical terminology where appropriate.
+    `;
+
+    return await ResilienceService.executeWithResilience('GROQ', async (apiKey) => {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages: [
+            { role: 'system', content: summaryPrompt },
+            { role: 'user', content: `CONVERSATION TO SUMMARIZE: ${JSON.stringify(history)}` }
+          ],
+          temperature: 0.3
+        })
+      });
+
+      const data: any = await response.json();
+      if (!response.ok) return "Summary recalibrating.";
       return data.choices[0].message.content;
     });
   }

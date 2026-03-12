@@ -1,11 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { Lock, Mail, ArrowLeft, Sparkles, Zap, Fingerprint, ShieldCheck, MessageCircle } from 'lucide-react';
+import { Lock, ArrowLeft, Sparkles, Zap, Fingerprint, ShieldCheck, MessageCircle } from 'lucide-react';
 import { gsap } from 'gsap';
 
+const countryCodes = [
+  { code: '+234', flag: '🇳🇬', name: 'Nigeria' },
+  { code: '+1', flag: '🇺🇸', name: 'USA' },
+  { code: '+44', flag: '🇬🇧', name: 'UK' },
+  { code: '+91', flag: '🇮🇳', name: 'India' },
+  { code: '+27', flag: '🇿🇦', name: 'South Africa' },
+  { code: '+971', flag: '🇦🇪', name: 'UAE' },
+  { code: '+254', flag: '🇰🇪', name: 'Kenya' },
+  { code: '+233', flag: '🇬🇭', name: 'Ghana' },
+];
+
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [countryCode, setCountryCode] = useState('+234');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -50,11 +62,8 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
 
-    let loginId = email;
-    if (!email.includes('@')) {
-      const cleanWhatsapp = email.replace(/\D/g, '');
-      loginId = `${cleanWhatsapp}@mediq.ai`;
-    }
+    const cleanWhatsapp = (countryCode + whatsapp).replace(/\D/g, '');
+    const loginId = `${cleanWhatsapp}@mediq.ai`;
 
     const { error } = await supabase.auth.signInWithPassword({ 
       email: loginId, 
@@ -113,15 +122,23 @@ export default function LoginPage() {
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[8px] font-black uppercase tracking-[0.3em] opacity-40 ml-4">Secure ID</label>
-                <div className="relative group">
-                  <MessageCircle className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5b0e14] group-focus-within:text-[#5b0e14] transition-colors" />
-                  <input 
-                    type="text" value={email} onChange={(e) => setEmail(e.target.value)}
-                    placeholder="nexus@mediq.ai or +234..." 
-                    className="w-full bg-white/80 border border-transparent focus:border-[#5b0e14]/10 rounded-2xl py-4 px-12 text-[12px] font-bold uppercase tracking-widest text-[#5b0e14] outline-none transition-all shadow-sm placeholder:opacity-10" 
-                    required
-                  />
+                <label className="text-[8px] font-black uppercase tracking-[0.3em] opacity-40 ml-4">Clinical Link (WhatsApp)</label>
+                <div className="flex gap-3">
+                  <select
+                    value={countryCode} onChange={(e) => setCountryCode(e.target.value)}
+                    className="w-28 bg-white/80 border border-transparent focus:border-[#5b0e14]/10 rounded-2xl py-4 px-2 text-[12px] font-bold text-[#5b0e14] outline-none shadow-sm appearance-none text-center cursor-pointer"
+                  >
+                    {countryCodes.map((c) => <option key={c.code} value={c.code} className="bg-white">{c.flag} {c.code}</option>)}
+                  </select>
+                  <div className="relative flex-1 group">
+                    <MessageCircle className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5b0e14] group-focus-within:text-[#5b0e14] transition-colors" />
+                    <input 
+                      type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value.replace(/\D/g, ''))}
+                      placeholder="812..." 
+                      className="w-full bg-white/80 border border-transparent focus:border-[#5b0e14]/10 rounded-2xl py-4 px-12 text-[12px] font-bold tracking-[0.2em] text-[#5b0e14] outline-none transition-all shadow-sm placeholder:opacity-10"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
               <div className="space-y-1.5">

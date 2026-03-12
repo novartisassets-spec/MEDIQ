@@ -6,7 +6,8 @@ import {
   Plus, X,
   Activity, Brain, Shield,
   Menu, Phone, Stethoscope, MessageSquare,
-  HeartPulse, Zap, MessageCircle, LogOut
+  HeartPulse, Zap, MessageCircle, LogOut,
+  Settings, Save
 } from 'lucide-react';
 import { gsap } from 'gsap';
 import { Button } from '@/components/ui/button';
@@ -84,6 +85,10 @@ export default function Dashboard() {
   const [isBackendOnline, setIsBackendOnline] = useState<boolean | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<any>(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editWhatsapp, setEditWhatsapp] = useState('');
+  const [latestBiomarkers, setLatestBiomarkers] = useState<any[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -105,78 +110,90 @@ export default function Dashboard() {
         .eq('id', session.user.id)
         .single();
       
-      if (profileData) setProfile(profileData);
+      if (profileData) {
+        setProfile(profileData);
+        setEditName(profileData.full_name || '');
+        setEditWhatsapp(profileData.whatsapp_number?.split('@')[0] || '');
+      } else {
+        // Identity not found in database (likely after a nuke)
+        console.warn('Sovereign identity not found in database. Purging ghost session...');
+        await supabase.auth.signOut();
+        navigate('/login');
+      }
     };
     initDashboard();
   }, [navigate]);
 
-  // Bouncing Effects
-  useEffect(() => {
-    // Logo bounce
-    gsap.to(".logo-bounce", {
-      y: -4,
-      duration: 1.5,
-      repeat: -1,
-      yoyo: true,
-      ease: "power1.inOut"
-    });
-    // Call button bounce
-    gsap.to(".call-bounce", {
-      scale: 1.1,
-      duration: 0.8,
-      repeat: -1,
-      yoyo: true,
-      ease: "sine.inOut"
-    });
-    // Input bar breathing/bounce
-    gsap.to(".input-bounce", {
-      boxShadow: "0 0 20px rgba(91,14,20,0.1)",
-      duration: 2,
-      repeat: -1,
-      yoyo: true,
-      ease: "power1.inOut"
-    });
-  }, []);
-
-  // Thinking Stages Cycle
-  useEffect(() => {
-    let interval: any;
-    if (isThinking) {
-      const stages = [
-        'Consulting MEDIQ Core...',
-        'Synthesizing biological data...',
-        'Analyzing clinical markers...',
-        'Formulating protocol...',
-        'Finalizing synthesis...'
-      ];
-      let i = 0;
-      interval = setInterval(() => {
-        setThinkingStage(stages[i % stages.length]);
-        i++;
-      }, 2000);
-    }
-    return () => clearInterval(interval);
-  }, [isThinking]);
-
-  // 1. Fetch User Sessions
-  const fetchSessions = async () => {
+  const updateProfile = async () => {
     if (!userId) return;
     try {
-      const res = await fetch(`${BACKEND_URL}/sessions?userId=${userId}`);
+      const cleanWhatsapp = editWhatsapp.replace(/\D/g, '');
+      const fullJid = cleanWhatsapp.includes('@') ? cleanWhatsapp : `${cleanWhatsapp}@s.whatsapp.net`;
+      
+      const res = await fetch(`${BACKEND_URL}/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          updates: {
+            full_name: editName,
+            whatsapp_number: fullJid
+          }
+        })
+      });
+
       if (res.ok) {
-        const data = await res.json();
-        setSessions(data);
+        toast.success('Identity Protocol Updated');
+        const updated = await res.json();
+        setProfile(updated);
+        setIsEditingProfile(false);
       }
     } catch (e) {
-      console.warn('Backend sessions unreachable');
+      toast.error('Failed to update identity');
+    }
+  };
+
+  // 1. Fetch User Sessions & Biomarkers
+  const fetchDashboardData = async () => {
+    if (!userId) return;
+    try {
+      const [sessionsRes, biomarkersRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/sessions?userId=${userId}`),
+        fetch(`${BACKEND_URL}/biomarkers/latest?userId=${userId}`)
+      ]);
+      
+      if (sessionsRes.ok) setSessions(await sessionsRes.json());
+      if (biomarkersRes.ok) setLatestBiomarkers(await biomarkersRes.json());
+    } catch (e) {
+      console.warn('Backend data unreachable');
     }
   };
 
   useEffect(() => {
-    if (userId) fetchSessions();
+    if (userId) fetchDashboardData();
   }, [userId]);
 
   // 2. Load Session History
+  const deleteSession = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    if (!window.confirm('Terminate this protocol session? Data will be archived.')) return;
+    
+    try {
+      const res = await fetch(`${BACKEND_URL}/session/${sessionId}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success('Session Terminated');
+        if (activeSessionId === sessionId) {
+          setMessages([]);
+          setHasEngaged(false);
+          setActiveSessionId(null);
+        }
+        fetchDashboardData();
+      }
+    } catch (e) {
+      toast.error('Failed to terminate session');
+    }
+  };
+
   const loadSession = async (sessionId: string) => {
     setIsThinking(true);
     setThinkingStage('Retrieving clinical history...');
@@ -272,9 +289,10 @@ export default function Dashboard() {
       const data = await response.json();
       
       // Update active session if it's new
+      // Update active session if it's new
       if (!activeSessionId && data.sessionId) {
         setActiveSessionId(data.sessionId);
-        fetchSessions();
+        fetchDashboardData();
       }
 
       setIsThinking(false);
@@ -336,9 +354,10 @@ export default function Dashboard() {
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       
+      // Update active session if it's new
       if (!activeSessionId && data.sessionId) {
         setActiveSessionId(data.sessionId);
-        fetchSessions();
+        fetchDashboardData();
       }
 
       setIsThinking(false);
@@ -400,14 +419,33 @@ export default function Dashboard() {
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 px-2 font-mono">History</p>
                 <div className="space-y-2">
                   {sessions.map((session) => (
-                    <button 
-                      key={session.id}
-                      onClick={() => loadSession(session.id)}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left group ${activeSessionId === session.id ? 'bg-[#f1e194] text-[#5b0e14]' : 'hover:bg-white/5 text-[#f1e194]/70 hover:text-[#f1e194]'}`}
-                    >
-                      <MessageSquare className={`w-4 h-4 ${activeSessionId === session.id ? 'text-[#5b0e14]' : 'opacity-40 group-hover:opacity-100'}`} />
-                      <span className="text-xs font-medium truncate">{session.title}</span>
-                    </button>
+                    <div key={session.id} className="relative group">
+                      <button 
+                        onClick={() => loadSession(session.id)}
+                        className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left ${activeSessionId === session.id ? 'bg-[#f1e194] text-[#5b0e14]' : 'hover:bg-white/5 text-[#f1e194]/70 hover:text-[#f1e194]'}`}
+                      >
+                        {session.platform === 'whatsapp' ? (
+                          <MessageCircle className={`w-4 h-4 ${activeSessionId === session.id ? 'text-[#5b0e14]' : 'text-emerald-400 opacity-60'}`} />
+                        ) : (
+                          <MessageSquare className={`w-4 h-4 ${activeSessionId === session.id ? 'text-[#5b0e14]' : 'opacity-40 group-hover:opacity-100'}`} />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-medium truncate block">{session.title}</span>
+                          {session.platform === 'whatsapp' && (
+                            <span className="text-[7px] font-black uppercase tracking-widest opacity-40">WhatsApp Neural Link</span>
+                          )}
+                        </div>
+                      </button>
+                      
+                      {/* DELETE BUTTON */}
+                      <button 
+                        onClick={(e) => deleteSession(e, session.id)}
+                        className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-red-400 transition-all ${activeSessionId === session.id ? 'group-hover:text-red-600' : ''}`}
+                        title="Archive Session"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -420,8 +458,22 @@ export default function Dashboard() {
               </p>
               <div className="grid grid-cols-1 gap-3">
                 {[
-                  { n: 'Metabolic', s: '94%', c: 'text-emerald-400', i: Zap },
-                  { n: 'Recovery', s: 'ELITE', c: 'text-amber-400', i: HeartPulse }
+                  { 
+                    n: 'Metabolic', 
+                    s: latestBiomarkers.find(b => b.category === 'Metabolic' || b.name.includes('Glucose'))?.value 
+                      ? `${latestBiomarkers.find(b => b.category === 'Metabolic' || b.name.includes('Glucose'))?.value} ${latestBiomarkers.find(b => b.category === 'Metabolic' || b.name.includes('Glucose'))?.unit || ''}`
+                      : 'Baseline Pending', 
+                    c: 'text-emerald-400', 
+                    i: Zap 
+                  },
+                  { 
+                    n: 'Inflammation', 
+                    s: latestBiomarkers.find(b => b.name.includes('CRP'))?.value 
+                      ? `${latestBiomarkers.find(b => b.name.includes('CRP'))?.value} ${latestBiomarkers.find(b => b.name.includes('CRP'))?.unit || ''}`
+                      : 'Elite', 
+                    c: 'text-amber-400', 
+                    i: HeartPulse 
+                  }
                 ].map((node, i) => (
                   <div key={i} className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
                     <div className="flex items-center justify-between">
@@ -446,16 +498,25 @@ export default function Dashboard() {
                 <p className="text-xs font-black truncate uppercase tracking-widest">{profile?.username || profile?.full_name || 'Sovereign'}</p>
                 <p className="text-[9px] opacity-40 uppercase font-bold">{profile?.country || 'Global'} Node</p>
               </div>
-              <button 
-                onClick={async () => {
-                  await supabase.auth.signOut();
-                  navigate('/login');
-                }}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors group"
-                title="Logout"
-              >
-                <LogOut className="w-4 h-4 opacity-30 group-hover:opacity-100 group-hover:text-red-400" />
-              </button>
+              <div className="flex flex-col gap-1">
+                <button 
+                  onClick={() => setIsEditingProfile(true)}
+                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors group"
+                  title="Profile Settings"
+                >
+                  <Settings className="w-3.5 h-3.5 opacity-30 group-hover:opacity-100" />
+                </button>
+                <button 
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                    navigate('/login');
+                  }}
+                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors group"
+                  title="Logout"
+                >
+                  <LogOut className="w-3.5 h-3.5 opacity-30 group-hover:opacity-100 group-hover:text-red-400" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -540,10 +601,30 @@ export default function Dashboard() {
               {/* TINY DATA CARDS */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-8">
                 {[
-                  { l: 'HRV Index', v: '84ms', i: Activity, c: 'text-emerald-500' },
-                  { l: 'Metabolic', v: 'Active', i: Zap, c: 'text-amber-500' },
-                  { l: 'Neural', v: 'Elite', i: Brain, c: 'text-[#5b0e14]' },
-                  { l: 'Core Status', v: '98.4', i: Shield, c: 'text-emerald-500' }
+                  { 
+                    l: 'HRV Index', 
+                    v: latestBiomarkers.find(b => b.name.includes('HRV'))?.value || '---', 
+                    i: Activity, 
+                    c: 'text-emerald-500' 
+                  },
+                  { 
+                    l: 'Metabolic', 
+                    v: latestBiomarkers.find(b => b.name.includes('Glucose'))?.value ? 'Active' : 'Pending', 
+                    i: Zap, 
+                    c: 'text-amber-500' 
+                  },
+                  { 
+                    l: 'Neural', 
+                    v: 'Elite', 
+                    i: Brain, 
+                    c: 'text-[#5b0e14]' 
+                  },
+                  { 
+                    l: 'Core Status', 
+                    v: 'Connected', 
+                    i: Shield, 
+                    c: 'text-emerald-500' 
+                  }
                 ].map((card, i) => (
                   <div key={i} className="bg-white/60 backdrop-blur-xl p-4 rounded-2xl border border-[#5b0e14]/5 shadow-sm hover:-translate-y-1 transition-transform cursor-help group">
                     <div className="flex items-center gap-2 mb-2 opacity-40 group-hover:opacity-100 transition-opacity">
@@ -679,6 +760,82 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      {/* --- PROFILE EDIT MODAL --- */}
+      {isEditingProfile && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#5b0e14]/60 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-[#f1e194] w-full max-w-md rounded-[3rem] p-8 md:p-12 shadow-2xl border border-white/20 space-y-8 animate-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between">
+              <h3 className="text-2xl font-serif font-black text-[#5b0e14] uppercase italic">Update Identity</h3>
+              <button onClick={() => setIsEditingProfile(false)} className="p-2 hover:bg-[#5b0e14]/5 rounded-full transition-colors">
+                <X className="w-6 h-6 text-[#5b0e14]" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[9px] font-black uppercase tracking-widest opacity-40 ml-4">Full Name</label>
+                <input 
+                  type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+                  className="w-full bg-[#5b0e14]/5 border border-transparent focus:border-[#5b0e14]/10 rounded-2xl py-4 px-6 text-sm font-bold text-[#5b0e14] outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[9px] font-black uppercase tracking-widest opacity-40 ml-4">WhatsApp Link</label>
+                <input 
+                  type="text" value={editWhatsapp} onChange={(e) => setEditWhatsapp(e.target.value)}
+                  placeholder="e.g. 2348123456789"
+                  className="w-full bg-[#5b0e14]/5 border border-transparent focus:border-[#5b0e14]/10 rounded-2xl py-4 px-6 text-sm font-bold text-[#5b0e14] outline-none transition-all"
+                />
+              </div>
+
+              <div className="pt-4 space-y-3">
+                <Button 
+                  onClick={updateProfile}
+                  className="w-full py-7 bg-[#5b0e14] text-[#f1e194] rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  Save Changes
+                </Button>
+                
+                <div className="relative py-4">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[#5b0e14]/10"></div></div>
+                  <div className="relative flex justify-center text-[8px] font-black uppercase tracking-widest text-[#5b0e14]/30 bg-[#f1e194] px-4">Danger Zone</div>
+                </div>
+
+                <Button 
+                  variant="outline"
+                  className="w-full py-7 border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white rounded-2xl font-black uppercase tracking-widest transition-all"
+                  onClick={async () => {
+                    if (window.confirm("NUKE ALERT: This will permanently wipe ALL your clinical data, sessions, and biomarkers. This is irreversible. Proceed?")) {
+                      const toastId = toast.loading("Initiating Core Reset...");
+                      try {
+                        const res = await fetch(`${BACKEND_URL}/nuke-user`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ userId })
+                        });
+                        if (res.ok) {
+                          toast.success('Core Reset Complete.', { id: toastId });
+                          await supabase.auth.signOut();
+                          navigate('/login');
+                        } else {
+                          toast.error('Reset failed.', { id: toastId });
+                        }
+                      } catch (e) {
+                        toast.error('Critical reset failure.', { id: toastId });
+                      }
+                    }
+                  }}
+                >
+                  Reset Core Data
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
