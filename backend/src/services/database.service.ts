@@ -176,6 +176,61 @@ export class DatabaseService {
     return data;
   }
 
+  /**
+   * Fetches the platform of the absolute last message for a user across all sessions.
+   * This is used to detect platform switches (e.g. User moving from WhatsApp to Dashboard).
+   */
+  static async getLastMessagePlatform(userId: string): Promise<'whatsapp' | 'dashboard' | null> {
+    const { data, error } = await supabaseAdmin
+      .from('chat_messages')
+      .select('platform, chat_sessions!inner(user_id)')
+      .eq('chat_sessions.user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) {
+      if (error) console.error(`[DatabaseService] Error in getLastMessagePlatform:`, error);
+      return null;
+    }
+    
+    const platform = (data as any).platform as 'whatsapp' | 'dashboard';
+    return platform;
+  }
+
+  /**
+   * Fetches the last N messages from a specific platform for a user across all sessions.
+   * Useful for injecting context during a platform switch.
+   */
+  static async getLastMessagesByPlatform(userId: string, platform: 'whatsapp' | 'dashboard', limit: number = 3) {
+    const { data, error } = await supabaseAdmin
+      .from('chat_messages')
+      .select(`
+        role, 
+        content, 
+        platform, 
+        created_at,
+        chat_sessions!inner(user_id)
+      `)
+      .eq('chat_sessions.user_id', userId)
+      .eq('platform', platform)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error(`[DatabaseService] Error fetching last ${platform} messages:`, error);
+      return [];
+    }
+
+    // Clean up the data to remove the nested join object and return in chronological order
+    return (data || []).map((m: any) => ({
+      role: m.role,
+      content: m.content,
+      platform: m.platform,
+      created_at: m.created_at
+    })).reverse();
+  }
+
   static async saveChatMessage(sessionId: string, role: 'user' | 'assistant', content: string, platform: 'dashboard' | 'whatsapp' = 'dashboard', metadata?: any) {
     const { error } = await supabaseAdmin
       .from('chat_messages')

@@ -125,9 +125,6 @@ export class AnalyzeController {
         activeSessionId = newSession.id;
       }
 
-      // 2. Save User Message
-      await DatabaseService.saveChatMessage(activeSessionId, 'user', message, 'dashboard');
-
       // 3. Retrieve Context (Health Memory + Profile + Cross-Platform Memory)
       const healthSnapshot = await HealthMemoryService.getHealthSnapshot(userId);
       const userProfile = await DatabaseService.getUserProfile(userId);
@@ -135,10 +132,28 @@ export class AnalyzeController {
       const whatsappSummary = await DatabaseService.getPlatformSummary(userId, 'whatsapp');
 
       // 4. Manage Conversation History & Summarization
-      let processedHistory = history || [];
-      if (processedHistory.length === 0 && activeSessionId) {
-        processedHistory = await DatabaseService.getSessionMessages(activeSessionId);
+      let processedHistory = await DatabaseService.getSessionMessages(activeSessionId);
+
+      // --- MILLION DOLLAR SURGICAL FIX: Platform Switch Detection ---
+      const lastPlatform = await DatabaseService.getLastMessagePlatform(userId);
+      console.log(`[OmniChannel Debug] Current Platform Request: dashboard | Last Registered Platform: ${lastPlatform}`);
+      
+      if (lastPlatform === 'whatsapp') {
+        console.log(`[OmniChannel] Platform Switch Detected: WhatsApp -> Dashboard. Fetching bridge history...`);
+        const bridgeHistory = await DatabaseService.getLastMessagesByPlatform(userId, 'whatsapp', 3);
+        
+        // Deduplicate
+        const existingContents = new Set(processedHistory.map((m: any) => m.content));
+        const uniqueBridge = bridgeHistory.filter((m: any) => !existingContents.has(m.content));
+        
+        if (uniqueBridge.length > 0) {
+          processedHistory = [...uniqueBridge, ...processedHistory];
+          console.log(`[OmniChannel Debug] Bridge injected. History size: ${processedHistory.length}`);
+        }
       }
+
+      // 2. Save User Message (Moved AFTER check to ensure absolute last platform is correct)
+      await DatabaseService.saveChatMessage(activeSessionId, 'user', message, 'dashboard');
 
       // If history is too long (Triggering at 25 messages for generous window)
       if (processedHistory.length > 25) {

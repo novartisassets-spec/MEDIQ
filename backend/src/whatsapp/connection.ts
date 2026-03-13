@@ -253,6 +253,26 @@ export class WhatsAppConnection {
             sessionId = sessions.length > 0 ? sessions[0].id : (await DatabaseService.createChatSession(user.id, 'WhatsApp Health Link', 'whatsapp')).id;
 
             let rawHistory = await DatabaseService.getSessionMessages(sessionId);
+
+            // --- MILLION DOLLAR SURGICAL FIX: Platform Switch Detection ---
+            const lastPlatform = await DatabaseService.getLastMessagePlatform(user.id);
+            console.log(`[OmniChannel Debug] User: ${user.id} | Current Platform: whatsapp | Last Absolute Platform: ${lastPlatform}`);
+
+            if (lastPlatform === 'dashboard') {
+              console.log(`[OmniChannel] Platform Switch Detected: Dashboard -> WhatsApp. Fetching bridge history...`);
+              const bridgeHistory = await DatabaseService.getLastMessagesByPlatform(user.id, 'dashboard', 3);
+              console.log(`[OmniChannel Debug] Fetched ${bridgeHistory.length} messages from Dashboard for injection.`);
+              
+              // Only inject if the messages are NOT already in the current session (to avoid duplication)
+              const existingContents = new Set(rawHistory.map((m: any) => m.content));
+              const uniqueBridge = bridgeHistory.filter((m: any) => !existingContents.has(m.content));
+              console.log(`[OmniChannel Debug] Unique bridge messages to inject: ${uniqueBridge.length}`);
+              
+              if (uniqueBridge.length > 0) {
+                rawHistory = [...uniqueBridge, ...rawHistory];
+                console.log(`[OmniChannel Debug] History augmented. New count: ${rawHistory.length}`);
+              }
+            }
             
             // 25-Message Summarization Trigger
             if (rawHistory.length > 25) {

@@ -144,8 +144,8 @@ export class AIOrchestrator {
     const prompt = PromptManager.getPrompt('conversation_persona.txt');
     const modelName = process.env.GROQ_CONVERSATION_MODEL || 'llama3-70b-8192';
 
-    // 1. Sliding Window: Take only the last 9 messages for live flow
-    const liveHistory = history.slice(-9);
+    // 1. Sliding Window: Take only the last 15 messages for live flow (increased from 9 for better bridge context)
+    const liveHistory = history.slice(-15);
     
     // 2. Attribution: Tag messages with platform and timestamp
     const formattedHistory = liveHistory.map(h => {
@@ -158,6 +158,8 @@ export class AIOrchestrator {
     });
 
     // 3. System Context Assembly (Hierarchical)
+    const hasBridgeContext = liveHistory.some(m => m.platform && m.platform !== 'dashboard'); // For Dashboard calls
+
     const systemContext = `
       ${prompt}
       
@@ -165,8 +167,8 @@ export class AIOrchestrator {
       ${healthSnapshot}
       
       === LONG-TERM MEMORY (CROSS-PLATFORM CONTINUITY) ===
-      ${crossPlatformSummary ? `OTHER FEED SUMMARY: ${crossPlatformSummary}` : 'No prior cross-platform history detected.'}
-      ${history.length > 9 && history[0].sessionSummary ? `CURRENT SESSION ARCHIVE: ${history[0].sessionSummary}` : ''}
+      ${crossPlatformSummary ? `OTHER FEED SUMMARY: ${crossPlatformSummary}` : 'No prior long-term cross-platform summary yet. Refer to recent conversation history for context.'}
+      ${history.length > 15 && history[0].sessionSummary ? `CURRENT SESSION ARCHIVE: ${history[0].sessionSummary}` : ''}
       
       USER IDENTITY:
       ${JSON.stringify(userProfile || 'Sovereign Node')}
@@ -175,16 +177,25 @@ export class AIOrchestrator {
       You are an elite clinical orchestrator. You are having a continuous conversation across multiple nodes (WhatsApp & Dashboard). 
       - IMPORTANT: Your response MUST be clean, natural raw text only. **NEVER** include the "[TIME - PLATFORM] MEDIQ:" prefix or any other metadata labels in your own output.
       - Always address the user by their Name if provided.
-      - Use the provided context to bridge conversations (e.g., "Earlier on WhatsApp you mentioned...").
+      - Use the provided context to bridge conversations seamlessly (e.g., if you see a user just moved from WhatsApp, acknowledge it: "Picking up from our talk on WhatsApp...").
+      - CRITICAL STATE UPDATE: If you previously stated that you didn't have access to context from another platform, but you now see messages tagged with [WHATSAPP] or [DASHBOARD] in your history, ACKNOWLEDGE the sync immediately (e.g., "Ah, your WhatsApp records just synced through—I can see now we were discussing...").
+      - Use the injected context to maintain a single "Golden Thread" of conversation across platforms.
+      - If you see history from another platform, acknowledge it to show continuity.
       - Maintain a consistent clinical persona and elite professional tone.
       - If you see a shift in biomarkers in the Snapshot, address it if relevant.
       - Use the provided conversation history (with timestamps) to understand the progression.
-      - If you previously asked a question, check if the user answered it.
+      - If you previously asked a question on ANY platform, check if the user answered it.
       - If you were discussing a specific biomarker, maintain that focus until it's natural to move on.
-      - Synthesize past context when relevant (e.g., "Earlier you mentioned feeling tired...").
+      - Synthesize past context when relevant.
       - Always bridge to their lifestyle.
       - Use plain English ONLY.
     `;
+
+    console.log(`[AI Orchestrator] Final Prompt Constructed. Total History Messages: ${formattedHistory.length}`);
+    if (formattedHistory.length > 0) {
+      console.log(`[AI Orchestrator Debug] First message in history: ${formattedHistory[0].content}`);
+      console.log(`[AI Orchestrator Debug] Last message in history: ${formattedHistory[formattedHistory.length - 1].content}`);
+    }
 
     return await ResilienceService.executeWithResilience('GROQ', async (apiKey) => {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -207,7 +218,18 @@ export class AIOrchestrator {
 
       const data: any = await response.json();
       if (!response.ok) throw new Error(data.error?.message || 'Groq API failure');
-      return data.choices[0].message.content;
+      
+      let aiResponse = data.choices[0].message.content;
+
+      // --- MILLION DOLLAR SURGICAL FIX: Response Sanitizer ---
+      // Strips hallucinated headers like "[12:00:00 PM - WHATSAPP] MEDIQ:" or "[CORE] MEDIQ:"
+      const headerRegex = /^\[.*?\]\s*(MEDIQ|User):\s*/i;
+      if (headerRegex.test(aiResponse)) {
+        console.log(`[AI Orchestrator] Sanitizing hallucinated header from response...`);
+        aiResponse = aiResponse.replace(headerRegex, '').trim();
+      }
+
+      return aiResponse;
     });
   }
 
