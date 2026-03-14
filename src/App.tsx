@@ -8,8 +8,21 @@ import ProtocolPage from './pages/Protocol';
 import ManifestoPage from './pages/Manifesto';
 import Dashboard from './pages/Dashboard';
 import ProtectedRoute from './components/layout/ProtectedRoute';
+import { FloatingChatIcon } from './components/ui/FloatingChatIcon';
+import { AIChatWindow } from './components/ui/AIChatWindow';
+import { useState } from 'react';
 
 export default function App() {
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false); // Example state for unread messages
+
+  const toggleChat = () => {
+    setIsChatOpen(prev => !prev);
+    if (isChatOpen) {
+      setHasUnreadMessages(false); // Clear unread when chat opens
+    }
+  };
+
   return (
     <Router>
       <Routes>
@@ -31,6 +44,8 @@ export default function App() {
         {/* Redirect to Home for any unknown routes */}
         <Route path="*" element={<Home />} />
       </Routes>
+      <FloatingChatIcon onClick={toggleChat} hasUnreadMessages={hasUnreadMessages} />
+      <AIChatWindow isOpen={isChatOpen} onClose={toggleChat} />
     </Router>
   );
 }
