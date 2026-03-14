@@ -8,8 +8,8 @@ import fetch from 'node-fetch';
 export class SelfPingService {
   private static intervalId: NodeJS.Timeout | null = null;
   private static readonly HEALTH_ENDPOINT = process.env.RENDER_EXTERNAL_URL 
-    ? `${process.env.RENDER_EXTERNAL_URL}/health` 
-    : `http://localhost:${process.env.PORT || 3000}/health`;
+    ? `${process.env.RENDER_EXTERNAL_URL}/api/v1/health` 
+    : `http://localhost:${process.env.PORT || 3000}/api/v1/health`;
 
   static start() {
     if (this.intervalId) return;

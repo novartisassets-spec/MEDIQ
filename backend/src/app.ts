@@ -21,8 +21,10 @@ app.use(express.json());
 // Routes
 app.use('/api/v1', analysisRoutes);
 
-// Health Check
-app.get('/health', (req, res) => {
+// Move health check under /api/v1 for unified proxy handling
+// analysisRoutes already handles /api/v1
+// We can also define it here for global visibility
+app.get('/api/v1/health', (req, res) => {
   res.status(200).json({ status: 'active', timestamp: new Date().toISOString() });
 });
 
