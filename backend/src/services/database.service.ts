@@ -341,15 +341,35 @@ export class DatabaseService {
     return data;
   }
 
-  static async getOrCreateUserByWhatsApp(whatsappId: string) {
+  static async getOrCreateUserByWhatsApp(whatsappId: string, resolvedPhone?: string) {
     // 1. Precise Normalization
     let normalizedId = whatsappId.trim();
-    const cleanNumber = normalizedId.split('@')[0].replace(/\D/g, '');
+    const idNumber = normalizedId.split('@')[0].replace(/\D/g, '');
+    const cleanPhone = resolvedPhone ? resolvedPhone.replace(/\D/g, '') : null;
     
-    console.log(`[DatabaseService] WhatsApp Lookup -> JID: ${normalizedId} | CleanNum: ${cleanNumber}`);
+    console.log(`[DatabaseService] WhatsApp Lookup -> JID: ${normalizedId} | ResolvedPhone: ${cleanPhone}`);
 
-    // 2. Lookup with precedence:
-    // A. Direct JID Match (Best case, catches mapped LIDs and PNIDs)
+    // 2. HIGHEST PRIORITY: Match by Resolved Phone Number (Extracted from metadata)
+    if (cleanPhone) {
+      console.log(`[DatabaseService] Attempting Phone-First Match: %${cleanPhone}%`);
+      const { data: userByPhone } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .ilike('whatsapp_number', `%${cleanPhone}%`)
+        .maybeSingle();
+
+      if (userByPhone) {
+        console.log(`[DatabaseService] Identity FOUND by Phone: ${userByPhone.full_name}`);
+        // If the current JID is an LID and the DB still has the old PNID, update it to the LID
+        if (normalizedId.endsWith('@lid') && userByPhone.whatsapp_number !== normalizedId) {
+          console.log(`[DatabaseService] Updating Profile JID to LID: ${normalizedId}`);
+          await supabaseAdmin.from('profiles').update({ whatsapp_number: normalizedId }).eq('id', userByPhone.id);
+        }
+        return { user: { ...userByPhone, whatsapp_number: normalizedId }, isNew: false };
+      }
+    }
+
+    // 3. SECOND PRIORITY: Direct JID Match
     const { data: userByJid } = await supabaseAdmin
       .from('profiles')
       .select('*')
@@ -357,58 +377,32 @@ export class DatabaseService {
       .maybeSingle();
 
     if (userByJid) {
-      console.log(`[DatabaseService] Identity Match Found: ${userByJid.full_name}`);
+      console.log(`[DatabaseService] Identity FOUND by JID: ${userByJid.full_name}`);
       return { user: userByJid, isNew: false };
     }
 
-    // B. LID BRIDGE RECOVERY (New: Catch users before they become "Genesis")
-    if (normalizedId.endsWith('@lid')) {
-      const mappedPhone = await this.getPhoneByLid(normalizedId);
-      if (mappedPhone) {
-        console.log(`[DatabaseService] LID Bridge Hit: ${normalizedId} -> ${mappedPhone}`);
-        // Attempt recovery using the mapped phone number
-        const { data: recoveredUser } = await supabaseAdmin
-          .from('profiles')
-          .select('*')
-          .ilike('whatsapp_number', `%${mappedPhone}%`)
-          .maybeSingle();
-
-        if (recoveredUser) {
-          console.log(`[DatabaseService] Identity Recovered via Bridge: ${recoveredUser.full_name}`);
-          // Promote LID to primary JID for future direct matches
-          await supabaseAdmin.from('profiles').update({ whatsapp_number: normalizedId }).eq('id', recoveredUser.id);
-          return { user: { ...recoveredUser, whatsapp_number: normalizedId }, isNew: false };
-        }
-      }
-    }
-
-    // C. Numeric Match (Fallback for unmapped LIDs or different PNID formats)
-    console.log(`[DatabaseService] No direct match. Searching by number: %${cleanNumber}%`);
+    // 4. THIRD PRIORITY: Numeric ID Match (Last Resort)
+    console.log(`[DatabaseService] No phone or JID match. Searching by ID number: %${idNumber}%`);
     const { data: userByNumberMatch } = await supabaseAdmin
       .from('profiles')
       .select('*')
-      .ilike('whatsapp_number', `%${cleanNumber}%`)
+      .ilike('whatsapp_number', `%${idNumber}%`)
       .maybeSingle();
 
     if (userByNumberMatch) {
-      console.log(`[DatabaseService] Numeric Match Found: ${userByNumberMatch.full_name}. Linking JID ${normalizedId}`);
-      const { data: updatedUser } = await supabaseAdmin
-        .from('profiles')
-        .update({ whatsapp_number: normalizedId })
-        .eq('id', userByNumberMatch.id)
-        .select()
-        .single();
-      return { user: updatedUser || userByNumberMatch, isNew: false };
+      console.log(`[DatabaseService] Identity FOUND by ID Match: ${userByNumberMatch.full_name}. Linking JID ${normalizedId}`);
+      await supabaseAdmin.from('profiles').update({ whatsapp_number: normalizedId }).eq('id', userByNumberMatch.id);
+      return { user: { ...userByNumberMatch, whatsapp_number: normalizedId }, isNew: false };
     }
 
-    console.log(`[DatabaseService] Total Identity Mismatch. Provisioning Genesis Profile for ${normalizedId}`);
-    // 3. Create new user if no identity exists
+    console.log(`[DatabaseService] TOTAL IDENTITY MISMATCH. Provisioning fresh profile for ${normalizedId}`);
+    // 5. Create new user if all else fails
     const { data: newUser, error: createError } = await supabaseAdmin
       .from('profiles')
       .insert({ 
         whatsapp_number: normalizedId,
         full_name: 'Sovereign User',
-        username: `user_${cleanNumber.slice(-4)}`
+        username: `user_${idNumber.slice(-4)}`
       })
       .select()
       .single();

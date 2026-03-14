@@ -76,7 +76,7 @@ export const AIChatWindow: React.FC<AIChatWindowProps> = ({ isOpen, onClose }) =
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 50, scale: 0.8 }}
           transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="fixed bottom-4 right-4 z-50 w-full max-w-sm md:max-w-md h-[80vh] md:h-[70vh] bg-gradient-to-br from-[#f1e194]/90 to-[#f1e194]/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 flex flex-col overflow-hidden"
+          className="fixed bottom-4 left-4 z-50 w-full max-w-sm md:max-w-md h-[80vh] md:h-[70vh] bg-gradient-to-br from-[#f1e194]/90 to-[#f1e194]/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 flex flex-col overflow-hidden"
         >
           <div className="flex items-center justify-between p-4 border-b border-white/20 bg-[#f1e194]/70">
             <div className="flex items-center gap-3">

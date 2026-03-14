@@ -164,33 +164,23 @@ export class WhatsAppConnection {
 
         if (!text && !imageMsg) continue;
 
-        // --- NEW: PN-FIRST IDENTITY RESOLUTION ---
-        // 1. Extract potential phone number from metadata (LID to PN Bridge)
+        // --- PN-FIRST IDENTITY RESOLUTION ---
+        // 1. Extract potential phone number from metadata
         const senderPn = (msg as any).senderPn || 
                          (msg.key as any).participantAlt || 
                          (msg.key as any).remoteJidAlt;
         
-        let resolvedFrom = from;
-        if (from.endsWith('@lid') && senderPn) {
-          const cleanPn = senderPn.split('@')[0].replace(/\D/g, '');
-          console.log(`[WhatsApp Bridge] Meta-Data PN Detected: ${cleanPn} for LID: ${from}`);
-          
-          // 2. Perform Lookup by PN first
-          const profile = await DatabaseService.getProfileByNumber(cleanPn);
-          if (profile) {
-            console.log(`[WhatsApp Bridge] Profile Matched by PN: ${profile.full_name}. Linking LID: ${from}`);
-            // Map the profile to this LID permanently and use PN for resolution
-            await DatabaseService.updateProfile(profile.id, { whatsapp_number: from });
-            await DatabaseService.saveLidMapping(from, cleanPn);
-            // We'll let the next step use the LID as it's now mapped
-          }
+        let resolvedPhone: string | undefined = undefined;
+        if (senderPn) {
+          resolvedPhone = senderPn.split('@')[0].replace(/\D/g, '');
+          console.log(`[WhatsApp Bridge] Meta-Data PN Detected: ${resolvedPhone} for Sender: ${from}`);
         }
 
         try {
           console.log(`[WhatsApp] Incoming Message | From: ${from} (${pushName}) | Type: ${imageMsg ? 'IMAGE' : 'TEXT'}`);
 
-          // 2. Resolve User (Now LID-aware and self-healing)
-          const { user, isNew } = await DatabaseService.getOrCreateUserByWhatsApp(from);
+          // 2. Resolve User (Passing pre-extracted PN for highest accuracy)
+          const { user, isNew } = await DatabaseService.getOrCreateUserByWhatsApp(from, resolvedPhone);
 
           // 2. Elite Onboarding (Unique Welcome)
           if (isNew && !user.welcome_sent) {

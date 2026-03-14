@@ -11,7 +11,7 @@ export const FloatingChatIcon: React.FC<FloatingChatIconProps> = ({ onClick, has
   return (
     <motion.button
       onClick={onClick}
-      className="fixed bottom-6 right-6 z-50 p-4 rounded-full bg-[#5b0e14] text-[#f1e194] shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 flex items-center justify-center cursor-pointer"
+      className="fixed bottom-6 left-6 z-50 p-4 rounded-full bg-[#5b0e14] text-[#f1e194] shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 flex items-center justify-center cursor-pointer"
       whileHover={{ scale: 1.1 }}
       whileTap={{ scale: 0.9 }}
       initial={{ opacity: 0, y: 20 }}
