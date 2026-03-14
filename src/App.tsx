@@ -14,7 +14,25 @@ import { useState } from 'react';
 
 export default function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [hasUnreadMessages, setHasUnreadMessages] = useState(false); // Example state for unread messages
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+
+  useEffect(() => {
+    // Diagnostic Heartbeat
+    const checkPulse = async () => {
+      console.log('[Heartbeat] Checking link to biological core...');
+      try {
+        const response = await fetch('/api/v1/health');
+        if (response.ok) {
+          console.log('[Heartbeat] Biological Core ONLINE.');
+        } else {
+          console.error('[Heartbeat] Biological Core UNSTABLE:', response.status);
+        }
+      } catch (err) {
+        console.error('[Heartbeat] Biological Core OFFLINE. Check proxy or Render status.', err);
+      }
+    };
+    checkPulse();
+  }, []);
 
   const toggleChat = () => {
     setIsChatOpen(prev => !prev);
