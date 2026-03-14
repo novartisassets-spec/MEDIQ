@@ -31,20 +31,22 @@ export const AIChatWindow: React.FC<AIChatWindowProps> = ({ isOpen, onClose }) =
     setIsSending(true);
 
     try {
-      const history = messages.map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text }));
+      const history = messages.map(m => ({ 
+        role: m.sender === 'user' ? 'user' : 'assistant', 
+        content: m.text 
+      }));
       
-      const response = await fetch('/api/v1/chat', {
+      const response = await fetch('/api/v1/support/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: inputMessage,
-          userId: 'support_chat_user', // A generic user ID for support chat
-          history: [...history, { role: 'user', content: inputMessage }],
+          history: history,
         }),
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'AI chat failed');
+      if (!response.ok) throw new Error(data.error || 'Support link failed');
 
       const aiMessage: Message = { sender: 'ai', text: data.response };
       setMessages((prev) => [...prev, aiMessage]);

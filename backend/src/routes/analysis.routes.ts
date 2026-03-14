@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { AnalyzeController } from '../controllers/analyze.controller';
+import { SupportController } from '../controllers/support.controller';
 
 const router = Router();
 
 router.post('/analyze', AnalyzeController.analyzeReport);
 router.post('/chat', AnalyzeController.chat);
+router.post('/support/chat', SupportController.handleSupportChat);
 router.get('/sessions', AnalyzeController.getSessions);
 router.get('/biomarkers/latest', AnalyzeController.getLatestBiomarkers);
 router.get('/history/:sessionId', AnalyzeController.getHistory);
