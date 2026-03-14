@@ -10,7 +10,7 @@ import Dashboard from './pages/Dashboard';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import { FloatingChatIcon } from './components/ui/FloatingChatIcon';
 import { AIChatWindow } from './components/ui/AIChatWindow';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);

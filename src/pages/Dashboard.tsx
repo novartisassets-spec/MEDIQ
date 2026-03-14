@@ -25,8 +25,7 @@ interface Message {
 const WHATSAPP_NUMBER = '+1234567890'; // Placeholder
 
 const getBackendUrl = () => {
-  const hostname = window.location.hostname;
-  return `http://${hostname}:5000/api/v1`;
+  return `/api/v1`;
 };
 
 const MEDIQAvatar = ({ isThinking }: { isThinking: boolean }) => {
@@ -221,7 +220,7 @@ export default function Dashboard() {
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        const res = await fetch(`http://${window.location.hostname}:5000/health`);
+        const res = await fetch(`/api/v1/health`);
         setIsBackendOnline(res.ok);
       } catch (e) {
         setIsBackendOnline(false);
